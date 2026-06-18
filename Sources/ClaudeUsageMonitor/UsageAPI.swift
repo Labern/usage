@@ -1,5 +1,6 @@
 import WebKit
 import Foundation
+import UsageCore
 
 /// Calls the real (undocumented) Anthropic usage endpoint directly using
 /// cookies captured at login time and persisted in our own file.
@@ -102,16 +103,5 @@ enum UsageAPI {
         }.resume()
     }
 
-    /// The API returns timestamps like "2026-06-18T03:39:59.404516+00:00" —
-    /// microsecond precision, which `ISO8601DateFormatter` alone won't parse.
-    static func parseDate(_ string: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXXXX"
-        if let date = formatter.date(from: string) { return date }
-
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return iso.date(from: string)
-    }
+    static func parseDate(_ string: String) -> Date? { parseUsageDate(string) }
 }

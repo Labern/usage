@@ -4,24 +4,18 @@ A menu bar app that shows your Claude plan usage as a live, color-changing circl
 
 ## Install
 
-1. Open **Terminal** (`Cmd + Space` → type "Terminal" → Return)
-2. Paste and run:
-   ```
-   xcode-select --install
-   ```
-3. Click **Install** in the popup, wait for it to finish
-4. On this page, click **Code → Download ZIP**, then unzip it
-5. In Terminal, run:
-   ```
-   cd ~/Downloads/usage-main
-   ./build_app.sh
-   ```
-6. Wait for "Installed to /Applications/Usage.app"
-7. `Cmd + Space` → type "Usage" → Return
-8. Click the new menu bar icon → **Connect Claude account**
-9. Log in, then click **Done**
+```
+xcode-select --install
+```
 
-Done. It auto-starts at login from here on.
+Download this repo as a ZIP and unzip it, then:
+
+```
+cd ~/Downloads/usage-main
+./build_app.sh
+```
+
+`Cmd+Space` → "Usage" → Return. Click the menu bar icon → **Connect Claude account**.
 
 ## Usage & features
 

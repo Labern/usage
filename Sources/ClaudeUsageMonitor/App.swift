@@ -3,6 +3,7 @@ import Foundation
 import AppKit
 import Combine
 import ServiceManagement
+import UsageCore
 
 // MARK: - Theme
 
@@ -24,85 +25,16 @@ func gaugeColor(for percent: Double) -> Color {
     }
 }
 
-// MARK: - Internal cost weighting (used only to compute % drift between syncs)
+// MARK: - InsightTone color (view-layer extension; InsightTone itself is in UsageCore)
 
-struct ModelPricing { let input: Double; let output: Double }
-
-let pricingTable: [String: ModelPricing] = [
-    "claude-sonnet-4-6": ModelPricing(input: 3.00, output: 15.00),
-    "claude-opus-4-8":   ModelPricing(input: 5.00, output: 25.00),
-    "claude-haiku-4-5":  ModelPricing(input: 1.00, output: 5.00),
-    "claude-fable-5":    ModelPricing(input: 10.00, output: 50.00),
-]
-let cacheWrite5mMultiplier = 1.25
-let cacheWrite1hMultiplier = 2.0
-let cacheReadMultiplier = 0.1
-
-struct TurnUsage: Identifiable {
-    let id: String
-    let sessionPath: String
-    let model: String
-    let inputTokens: Int
-    let outputTokens: Int
-    let cacheWrite5m: Int
-    let cacheWrite1h: Int
-    let cacheRead: Int
-    let timestamp: Date
-
-    var pricing: ModelPricing { pricingTable[model] ?? ModelPricing(input: 0, output: 0) }
-
-    /// "Weighted cost" — an internal $-equivalent unit used only to interpolate
-    /// plan-quota percentage between manual syncs. Not shown as the headline metric.
-    var weightedCost: Double {
-        let i = Double(inputTokens) * pricing.input
-        let o = Double(outputTokens) * pricing.output
-        let w5 = Double(cacheWrite5m) * pricing.input * cacheWrite5mMultiplier
-        let w1 = Double(cacheWrite1h) * pricing.input * cacheWrite1hMultiplier
-        let r = Double(cacheRead) * pricing.input * cacheReadMultiplier
-        return (i + o + w5 + w1 + r) / 1_000_000
+extension InsightTone {
+    var color: Color {
+        switch self {
+        case .info:    return .accentViolet
+        case .warning: return .accentPink
+        case .good:    return .accentTeal
+        }
     }
-
-    /// Tokens that weren't served from cache — a proxy for "fresh context cost".
-    var freshTokens: Int { inputTokens + cacheWrite5m + cacheWrite1h }
-}
-
-/// Parses one JSONL transcript line into a TurnUsage, if it's an assistant
-/// message carrying a `usage` block. Shared by live tailing and full-history
-/// analysis (Insights) so both read usage data identically.
-func parseTurnUsage(fromLine line: String, sessionPath: String = "") -> TurnUsage? {
-    guard let data = line.data(using: .utf8),
-          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          (obj["type"] as? String) == "assistant",
-          let message = obj["message"] as? [String: Any],
-          let usage = message["usage"] as? [String: Any],
-          let id = message["id"] as? String,
-          let model = message["model"] as? String
-    else { return nil }
-
-    let inputTokens = usage["input_tokens"] as? Int ?? 0
-    let outputTokens = usage["output_tokens"] as? Int ?? 0
-    let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
-    var cacheWrite5m = 0
-    var cacheWrite1h = 0
-    if let creation = usage["cache_creation"] as? [String: Any] {
-        cacheWrite5m = creation["ephemeral_5m_input_tokens"] as? Int ?? 0
-        cacheWrite1h = creation["ephemeral_1h_input_tokens"] as? Int ?? 0
-    } else {
-        cacheWrite5m = usage["cache_creation_input_tokens"] as? Int ?? 0
-    }
-
-    // Best-effort timestamp from the transcript line itself; falls back to now.
-    var timestamp = Date()
-    if let tsString = obj["timestamp"] as? String, let parsed = ISO8601DateFormatter().date(from: tsString) {
-        timestamp = parsed
-    }
-
-    return TurnUsage(
-        id: id, sessionPath: sessionPath, model: model,
-        inputTokens: inputTokens, outputTokens: outputTokens,
-        cacheWrite5m: cacheWrite5m, cacheWrite1h: cacheWrite1h, cacheRead: cacheRead,
-        timestamp: timestamp
-    )
 }
 
 // MARK: - Real usage state, persisted to disk
@@ -115,6 +47,12 @@ struct SyncState: Codable {
     var lastFetchAt: Date?
     var lastFetchFailed: Bool = false
     var hasConnectedOnce: Bool = false
+    /// Learned ratio: (API % delta) / (sum of turn weightedCosts since last delta).
+    /// nil until the API has ticked at least once while the app was running.
+    var calibrationFactor: Double?
+    /// Running sum of turn weightedCosts since the last observed API tick.
+    /// Persisted so a relaunch doesn't reset mid-window accumulation.
+    var accumulatedWeightedCost: Double = 0
 
     static let empty = SyncState()
 }
@@ -152,8 +90,6 @@ func applyDarkAppearance(_ window: NSWindow) {
     window.appearance = NSAppearance(named: .darkAqua)
 }
 
-enum WindowSide { case left, right }
-
 /// Positions an auxiliary window flush against the left or right edge of the
 /// main popover (or the menu bar button if the popover isn't available),
 /// top-aligned with it — so Settings/Insights/Turn History visibly sit
@@ -163,16 +99,6 @@ func positionWindow(_ window: NSWindow, relativeTo anchorFrame: NSRect?, side: W
         window.center()
         return
     }
-    let gap: CGFloat = 14
-    let width = window.frame.width
-    var x: CGFloat
-    switch side {
-    case .left:
-        x = anchorFrame.minX - width - gap
-    case .right:
-        x = anchorFrame.maxX + gap
-    }
-
     // Always resolve some screen — falling through to .first if .main is
     // somehow unavailable — so clamping never silently gets skipped. The
     // menu bar sits at the top-right corner, so the popover (and therefore
@@ -181,9 +107,9 @@ func positionWindow(_ window: NSWindow, relativeTo anchorFrame: NSRect?, side: W
     let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchorFrame) })
         ?? NSScreen.main
         ?? NSScreen.screens.first
-    if let visible = screen?.visibleFrame {
-        x = min(max(x, visible.minX), visible.maxX - width)
-    }
+    let width = window.frame.width
+    let x = screen.map { targetWindowX(windowWidth: width, anchorFrame: anchorFrame, side: side, screenVisibleFrame: $0.visibleFrame) }
+        ?? (side == .left ? anchorFrame.minX - width - 14 : anchorFrame.maxX + 14)
     window.setFrameTopLeftPoint(NSPoint(x: x, y: anchorFrame.maxY))
 
     // The popover stays open (semitransient) and renders at a popover-level
@@ -195,7 +121,7 @@ func positionWindow(_ window: NSWindow, relativeTo anchorFrame: NSRect?, side: W
 final class UsageMonitor: ObservableObject {
     @Published var lastTurn: TurnUsage?
     @Published var lastTurnPercentImpact: Double?
-    @Published var cumulativeCost: Double = 0      // lifetime, all local sessions — feeds Insights only
+    @Published var recentTurns: [TurnUsage] = []
     @Published var turnCount: Int = 0
     @Published var syncState: SyncState = loadSyncState()
     @Published var settings: AppSettings = loadSettings()
@@ -242,7 +168,7 @@ final class UsageMonitor: ObservableObject {
             segments.append(String(format: "%.0f%%", estimatedPercent))
         }
         if settings.showLastTurn, let impact = lastTurnPercentImpact {
-            segments.append(String(format: "+%.1f%% last turn", impact))
+            segments.append(String(format: "+%.2f%% last turn", impact))
         }
         if settings.showNextSession, let resets = syncState.sessionResetsAt {
             segments.append("New session at \(resets.formatted(date: .omitted, time: .shortened))")
@@ -391,21 +317,29 @@ final class UsageMonitor: ObservableObject {
             return
         }
 
-        // Real measured delta for "last turn impact" — valid only if the
-        // session window itself didn't just reset between fetches. The API
-        // recomputes resets_at fresh on every call with a little jitter
-        // (observed ~1s drift between consecutive calls), so exact Date
-        // equality almost never holds — use a tolerance instead. An actual
-        // reset jumps resets_at by up to 5 hours, far outside this window.
-        var sameWindow = false
-        if let oldResets = syncState.sessionResetsAt, let newResets = newSessionResets {
-            sameWindow = abs(oldResets.timeIntervalSince(newResets)) < 120
-        }
-        if let previous = syncState.sessionPercent, sameWindow, sessionPercent >= previous {
-            lastTurnPercentImpact = sessionPercent - previous
-        } else {
+        // Three cases for what the API response tells us:
+        let delta = turnPercentImpact(
+            previousPercent: syncState.sessionPercent,
+            previousResetsAt: syncState.sessionResetsAt,
+            newPercent: sessionPercent,
+            newResetsAt: newSessionResets
+        )
+        if let d = delta, d > 0 {
+            // API percent genuinely ticked up. Update the calibration factor from
+            // observed (API delta / accumulated local cost) and record actual delta.
+            if syncState.accumulatedWeightedCost > 0 {
+                syncState.calibrationFactor = d / syncState.accumulatedWeightedCost
+            }
+            syncState.accumulatedWeightedCost = 0
+            lastTurnPercentImpact = d
+        } else if delta == nil {
+            // Session window changed or no previous data. Reset accumulator so
+            // calibration restarts from zero for the new window.
+            syncState.accumulatedWeightedCost = 0
             lastTurnPercentImpact = nil
         }
+        // delta == 0.0: same integer percent as before — API hasn't ticked yet.
+        // Leave lastTurnPercentImpact at the calibrated estimate set in processLine.
 
         syncState.sessionPercent = sessionPercent
         syncState.sessionResetsAt = newSessionResets
@@ -457,8 +391,17 @@ final class UsageMonitor: ObservableObject {
 
         DispatchQueue.main.async {
             self.lastTurn = turn
-            self.cumulativeCost += turn.weightedCost
             self.turnCount += 1
+            self.recentTurns.insert(turn, at: 0)
+            if self.recentTurns.count > 10 { self.recentTurns.removeLast() }
+            self.syncState.accumulatedWeightedCost += turn.weightedCost
+            // Show a calibrated per-turn estimate immediately, before the API call
+            // returns. If we have a factor from a prior observed API tick, multiply
+            // this turn's local cost by it. The API call may later overwrite this
+            // with the real delta if the integer percent actually ticked up.
+            if let factor = self.syncState.calibrationFactor, factor > 0, turn.weightedCost > 0 {
+                self.lastTurnPercentImpact = turn.weightedCost * factor
+            }
             self.fetchAfterTurn()
         }
     }
@@ -504,6 +447,17 @@ func relativeTime(_ date: Date) -> String {
     if seconds < 60 { return "just now" }
     if seconds < 3600 { return "\(Int(seconds / 60))m ago" }
     return "\(Int(seconds / 3600))h ago"
+}
+
+func durationUntil(_ date: Date) -> String {
+    let secs = date.timeIntervalSinceNow
+    guard secs > 0 else { return "now" }
+    let mins = Int(secs / 60)
+    if mins < 60 { return "\(mins) min" }
+    let hrs = mins / 60
+    let rem = mins % 60
+    if rem == 0 { return "\(hrs)h" }
+    return "\(hrs)h \(rem)m"
 }
 
 struct ConnectPanel: View {
@@ -608,6 +562,53 @@ struct PhoneDashboardPanel: View {
     }
 }
 
+// MARK: - Inline turn row (used in main popover)
+
+private struct RecentTurnRow: View {
+    let turn: TurnUsage
+    let calibrationFactor: Double?
+    let isLatest: Bool
+    let latestImpact: Double?
+
+    private var impactText: String? {
+        // Use the live lastTurnPercentImpact for the newest entry — it may
+        // reflect the real API delta rather than a calibrated estimate.
+        let value: Double?
+        if isLatest, let live = latestImpact {
+            value = live
+        } else if let factor = calibrationFactor, factor > 0, turn.weightedCost > 0 {
+            value = turn.weightedCost * factor
+        } else {
+            value = nil
+        }
+        guard let v = value else { return nil }
+        return v < 0.005 ? "<0.01%" : String(format: "+%.2f%%", v)
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(relativeTime(turn.timestamp))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.35))
+                .frame(width: 52, alignment: .leading)
+            Text(turn.model.replacingOccurrences(of: "claude-", with: ""))
+                .font(.system(size: 13, weight: isLatest ? .semibold : .regular))
+                .foregroundStyle(.white.opacity(isLatest ? 0.9 : 0.55))
+                .lineLimit(1)
+            Spacer()
+            if let text = impactText {
+                Text(text)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(isLatest ? Color.accentTeal : Color.accentTeal.opacity(0.6))
+            } else {
+                Text("—")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.2))
+            }
+        }
+    }
+}
+
 // MARK: - Main popover content
 
 struct MenuContentView: View {
@@ -625,14 +626,14 @@ struct MenuContentView: View {
                         .foregroundStyle(.white)
                     Spacer()
                     Button {
-                        monitor.openSettings()
+                        monitor.openInsights()
                     } label: {
-                        Image(systemName: "gearshape")
+                        Image(systemName: "sparkles")
                             .font(.system(size: 16))
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(Color.accentViolet)
                     }
                     .buttonStyle(.plain)
-                    .help("Settings")
+                    .help("Insights & recommendations")
                     Button {
                         monitor.openTurnHistory()
                     } label: {
@@ -643,14 +644,14 @@ struct MenuContentView: View {
                     .buttonStyle(.plain)
                     .help("Turn history")
                     Button {
-                        monitor.openInsights()
+                        monitor.openSettings()
                     } label: {
-                        Image(systemName: "sparkles")
+                        Image(systemName: "gearshape")
                             .font(.system(size: 16))
-                            .foregroundStyle(Color.accentViolet)
+                            .foregroundStyle(.white.opacity(0.6))
                     }
                     .buttonStyle(.plain)
-                    .help("Insights & recommendations")
+                    .help("Settings")
                     Circle().fill(Color.accentTeal).frame(width: 9, height: 9)
                         .opacity(pulse ? 1 : 0.3)
                         .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: pulse)
@@ -680,25 +681,36 @@ struct MenuContentView: View {
                     }
                 }
 
-                if let turn = monitor.lastTurn {
+                if !monitor.recentTurns.isEmpty {
                     Divider().background(Color.white.opacity(0.1))
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("LAST TURN").font(.system(size: 13, weight: .bold)).foregroundStyle(.white.opacity(0.45))
-                        HStack {
-                            Text(turn.model.replacingOccurrences(of: "claude-", with: ""))
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.85))
-                            Spacer()
-                            if let impact = monitor.lastTurnPercentImpact {
-                                Text(String(format: "+%.2f%% of quota", impact))
-                                    .font(.system(size: 15, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(gaugeColor(for: monitor.estimatedPercent))
-                            } else {
-                                Text("measuring on next sync")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.white.opacity(0.4))
-                            }
+                        Text("RECENT TURNS")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.45))
+                        ForEach(Array(monitor.recentTurns.prefix(5))) { turn in
+                            RecentTurnRow(
+                                turn: turn,
+                                calibrationFactor: monitor.syncState.calibrationFactor,
+                                isLatest: turn.id == monitor.recentTurns.first?.id,
+                                latestImpact: monitor.lastTurnPercentImpact
+                            )
                         }
+                    }
+                }
+
+                if let predicted = sessionRunOutEstimate(
+                    percent: monitor.syncState.sessionPercent,
+                    resetsAt: monitor.syncState.sessionResetsAt
+                ) {
+                    Divider().background(Color.white.opacity(0.1))
+                    HStack(spacing: 7) {
+                        Image(systemName: "hourglass")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.white.opacity(0.4))
+                        Text("Predicted usage burn at \(predicted.formatted(date: .omitted, time: .shortened)), in \(durationUntil(predicted))")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.white.opacity(0.75))
+                        Spacer()
                     }
                 }
 

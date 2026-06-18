@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Foundation
+import UsageCore
 
 // MARK: - Persisted settings
 
