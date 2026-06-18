@@ -157,6 +157,8 @@ final class UsageMonitor: ObservableObject {
     let insightsAnalyzer = InsightsAnalyzer()
     private let insightsWindow = InsightsWindowController()
     private let settingsWindow = SettingsWindowController()
+    let turnHistoryAnalyzer = TurnHistoryAnalyzer()
+    private let turnHistoryWindow = TurnHistoryWindowController()
     let localServer = LocalUsageServer()
 
     @Published var statusMessage: String = ""
@@ -281,6 +283,10 @@ final class UsageMonitor: ObservableObject {
 
     func openSettings() {
         settingsWindow.show(monitor: self)
+    }
+
+    func openTurnHistory() {
+        turnHistoryWindow.show(analyzer: turnHistoryAnalyzer)
     }
 
     /// Force an immediate real fetch from the actual claude.ai usage API —
@@ -550,6 +556,15 @@ struct MenuContentView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Settings")
+                    Button {
+                        monitor.openTurnHistory()
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color.accentTeal)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Turn history")
                     Button {
                         monitor.openInsights()
                     } label: {
