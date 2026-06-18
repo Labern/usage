@@ -238,7 +238,7 @@ struct SettingsView: View {
 final class SettingsWindowController {
     private var window: NSWindow?
 
-    func show(monitor: UsageMonitor, anchorButton: NSStatusBarButton?) {
+    func show(monitor: UsageMonitor, anchorFrame: NSRect?, side: WindowSide) {
         if let window = window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -251,7 +251,7 @@ final class SettingsWindowController {
         window.isReleasedWhenClosed = false
         applyDarkAppearance(window)
         window.makeKeyAndOrderFront(nil)
-        positionWindow(window, nearStatusItemButton: anchorButton)
+        positionWindow(window, relativeTo: anchorFrame, side: side)
         self.window = window
         NSApp.activate(ignoringOtherApps: true)
     }

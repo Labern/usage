@@ -152,24 +152,32 @@ func applyDarkAppearance(_ window: NSWindow) {
     window.appearance = NSAppearance(named: .darkAqua)
 }
 
-func positionWindow(_ window: NSWindow, nearStatusItemButton button: NSStatusBarButton?) {
-    guard let button = button, let buttonWindow = button.window else {
+enum WindowSide { case left, right }
+
+/// Positions an auxiliary window flush against the left or right edge of the
+/// main popover (or the menu bar button if the popover isn't available),
+/// top-aligned with it — so Settings/Insights/Turn History visibly sit
+/// beside the app instead of replacing or covering it.
+func positionWindow(_ window: NSWindow, relativeTo anchorFrame: NSRect?, side: WindowSide) {
+    guard let anchorFrame = anchorFrame else {
         window.center()
         return
     }
-    let buttonScreenFrame = buttonWindow.convertToScreen(button.frame)
-    let gap: CGFloat = 8
-    var topLeft = NSPoint(x: buttonScreenFrame.minX, y: buttonScreenFrame.minY - gap)
-
-    if let screen = buttonWindow.screen ?? NSScreen.main {
-        let width = window.frame.width
-        // Keep it on-screen — if it would run off the right edge, hang it
-        // from the button's right edge instead of its left edge.
-        if topLeft.x + width > screen.visibleFrame.maxX {
-            topLeft.x = buttonScreenFrame.maxX - width
-        }
+    let gap: CGFloat = 14
+    let width = window.frame.width
+    var x: CGFloat
+    switch side {
+    case .left:
+        x = anchorFrame.minX - width - gap
+    case .right:
+        x = anchorFrame.maxX + gap
     }
-    window.setFrameTopLeftPoint(topLeft)
+
+    let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchorFrame) }) ?? NSScreen.main
+    if let visible = screen?.visibleFrame {
+        x = min(max(x, visible.minX), visible.maxX - width)
+    }
+    window.setFrameTopLeftPoint(NSPoint(x: x, y: anchorFrame.maxY))
 }
 
 final class UsageMonitor: ObservableObject {
@@ -179,7 +187,10 @@ final class UsageMonitor: ObservableObject {
     @Published var turnCount: Int = 0
     @Published var syncState: SyncState = loadSyncState()
     @Published var settings: AppSettings = loadSettings()
-    weak var anchorButton: NSStatusBarButton?
+    /// Returns the screen-space frame to position auxiliary windows against —
+    /// the popover's own frame while it's open, falling back to the menu bar
+    /// button. Set once by AppDelegate at launch.
+    var anchorFrameProvider: (() -> NSRect?)?
 
     private var fileOffsets: [String: UInt64] = [:]
     private var seenMessageIDs = Set<String>()
@@ -311,15 +322,15 @@ final class UsageMonitor: ObservableObject {
     }
 
     func openInsights() {
-        insightsWindow.show(analyzer: insightsAnalyzer, weeklyPercent: syncState.weeklyPercent, anchorButton: anchorButton)
+        insightsWindow.show(analyzer: insightsAnalyzer, weeklyPercent: syncState.weeklyPercent, anchorFrame: anchorFrameProvider?(), side: .right)
     }
 
     func openSettings() {
-        settingsWindow.show(monitor: self, anchorButton: anchorButton)
+        settingsWindow.show(monitor: self, anchorFrame: anchorFrameProvider?(), side: .left)
     }
 
     func openTurnHistory() {
-        turnHistoryWindow.show(analyzer: turnHistoryAnalyzer, anchorButton: anchorButton)
+        turnHistoryWindow.show(analyzer: turnHistoryAnalyzer, anchorFrame: anchorFrameProvider?(), side: .right)
     }
 
     /// Force an immediate real fetch from the actual claude.ai usage API —
@@ -712,16 +723,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(toggle)
         }
         statusItem = item
-        sharedMonitor.anchorButton = item.button
 
         let hosting = NSHostingController(rootView: MenuContentView(monitor: sharedMonitor))
         hosting.sizingOptions = [.preferredContentSize]
         let pop = NSPopover()
-        pop.behavior = .transient
+        // .transient closes the popover the instant any other window becomes
+        // key — including our own Settings/Insights/Turn History windows.
+        // .semitransient only closes on app deactivation or a click truly
+        // outside the app, so opening an auxiliary window leaves it open.
+        pop.behavior = .semitransient
         pop.contentSize = NSSize(width: 400, height: 700)
         pop.contentViewController = hosting
         pop.appearance = NSAppearance(named: .darkAqua)
         popover = pop
+
+        sharedMonitor.anchorFrameProvider = { [weak self] in
+            guard let self = self else { return nil }
+            if self.popover.isShown, let popoverWindow = self.popover.contentViewController?.view.window {
+                return popoverWindow.frame
+            }
+            if let button = self.statusItem.button, let buttonWindow = button.window {
+                return buttonWindow.convertToScreen(button.frame)
+            }
+            return nil
+        }
 
         refresh()
 

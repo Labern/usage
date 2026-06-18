@@ -284,7 +284,7 @@ struct InsightsView: View {
 final class InsightsWindowController {
     private var window: NSWindow?
 
-    func show(analyzer: InsightsAnalyzer, weeklyPercent: Double?, anchorButton: NSStatusBarButton?) {
+    func show(analyzer: InsightsAnalyzer, weeklyPercent: Double?, anchorFrame: NSRect?, side: WindowSide) {
         if let window = window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -297,7 +297,7 @@ final class InsightsWindowController {
         window.isReleasedWhenClosed = false
         applyDarkAppearance(window)
         window.makeKeyAndOrderFront(nil)
-        positionWindow(window, nearStatusItemButton: anchorButton)
+        positionWindow(window, relativeTo: anchorFrame, side: side)
         self.window = window
         NSApp.activate(ignoringOtherApps: true)
     }

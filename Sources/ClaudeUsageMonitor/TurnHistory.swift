@@ -190,7 +190,7 @@ struct TurnHistoryRow: View {
 final class TurnHistoryWindowController {
     private var window: NSWindow?
 
-    func show(analyzer: TurnHistoryAnalyzer, anchorButton: NSStatusBarButton?) {
+    func show(analyzer: TurnHistoryAnalyzer, anchorFrame: NSRect?, side: WindowSide) {
         if let window = window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -203,7 +203,7 @@ final class TurnHistoryWindowController {
         window.isReleasedWhenClosed = false
         applyDarkAppearance(window)
         window.makeKeyAndOrderFront(nil)
-        positionWindow(window, nearStatusItemButton: anchorButton)
+        positionWindow(window, relativeTo: anchorFrame, side: side)
         self.window = window
         NSApp.activate(ignoringOtherApps: true)
     }
