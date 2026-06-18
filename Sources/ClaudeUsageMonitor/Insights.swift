@@ -284,7 +284,7 @@ struct InsightsView: View {
 final class InsightsWindowController {
     private var window: NSWindow?
 
-    func show(analyzer: InsightsAnalyzer, weeklyPercent: Double?) {
+    func show(analyzer: InsightsAnalyzer, weeklyPercent: Double?, anchorButton: NSStatusBarButton?) {
         if let window = window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -294,9 +294,10 @@ final class InsightsWindowController {
         let window = NSWindow(contentViewController: hosting)
         window.title = "Claude Usage Insights"
         window.styleMask = [.titled, .closable, .miniaturizable]
-        window.center()
         window.isReleasedWhenClosed = false
+        applyDarkAppearance(window)
         window.makeKeyAndOrderFront(nil)
+        positionWindow(window, nearStatusItemButton: anchorButton)
         self.window = window
         NSApp.activate(ignoringOtherApps: true)
     }

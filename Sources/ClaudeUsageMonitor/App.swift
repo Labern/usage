@@ -140,6 +140,38 @@ func saveSyncState(_ state: SyncState) {
 
 // MARK: - JSONL tailing across ALL local Claude Code sessions on this Mac
 
+/// Positions an auxiliary window (Settings, Insights, Turn History) just
+/// below and to the right of the menu bar icon, instead of screen-centered —
+/// centered windows tend to land underneath whatever you were just looking
+/// at. Falls back to centering if the button isn't available for some reason.
+/// Native controls (segmented pickers, checkboxes) render with light-mode
+/// label colors by default — black text on our dark gradient backgrounds is
+/// unreadable when deselected. Forcing dark appearance on the window fixes
+/// it at the source instead of fighting each control's text color.
+func applyDarkAppearance(_ window: NSWindow) {
+    window.appearance = NSAppearance(named: .darkAqua)
+}
+
+func positionWindow(_ window: NSWindow, nearStatusItemButton button: NSStatusBarButton?) {
+    guard let button = button, let buttonWindow = button.window else {
+        window.center()
+        return
+    }
+    let buttonScreenFrame = buttonWindow.convertToScreen(button.frame)
+    let gap: CGFloat = 8
+    var topLeft = NSPoint(x: buttonScreenFrame.minX, y: buttonScreenFrame.minY - gap)
+
+    if let screen = buttonWindow.screen ?? NSScreen.main {
+        let width = window.frame.width
+        // Keep it on-screen — if it would run off the right edge, hang it
+        // from the button's right edge instead of its left edge.
+        if topLeft.x + width > screen.visibleFrame.maxX {
+            topLeft.x = buttonScreenFrame.maxX - width
+        }
+    }
+    window.setFrameTopLeftPoint(topLeft)
+}
+
 final class UsageMonitor: ObservableObject {
     @Published var lastTurn: TurnUsage?
     @Published var lastTurnPercentImpact: Double?
@@ -147,6 +179,7 @@ final class UsageMonitor: ObservableObject {
     @Published var turnCount: Int = 0
     @Published var syncState: SyncState = loadSyncState()
     @Published var settings: AppSettings = loadSettings()
+    weak var anchorButton: NSStatusBarButton?
 
     private var fileOffsets: [String: UInt64] = [:]
     private var seenMessageIDs = Set<String>()
@@ -278,15 +311,15 @@ final class UsageMonitor: ObservableObject {
     }
 
     func openInsights() {
-        insightsWindow.show(analyzer: insightsAnalyzer, weeklyPercent: syncState.weeklyPercent)
+        insightsWindow.show(analyzer: insightsAnalyzer, weeklyPercent: syncState.weeklyPercent, anchorButton: anchorButton)
     }
 
     func openSettings() {
-        settingsWindow.show(monitor: self)
+        settingsWindow.show(monitor: self, anchorButton: anchorButton)
     }
 
     func openTurnHistory() {
-        turnHistoryWindow.show(analyzer: turnHistoryAnalyzer)
+        turnHistoryWindow.show(analyzer: turnHistoryAnalyzer, anchorButton: anchorButton)
     }
 
     /// Force an immediate real fetch from the actual claude.ai usage API —
@@ -679,6 +712,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(toggle)
         }
         statusItem = item
+        sharedMonitor.anchorButton = item.button
 
         let hosting = NSHostingController(rootView: MenuContentView(monitor: sharedMonitor))
         hosting.sizingOptions = [.preferredContentSize]
@@ -686,6 +720,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pop.behavior = .transient
         pop.contentSize = NSSize(width: 400, height: 700)
         pop.contentViewController = hosting
+        pop.appearance = NSAppearance(named: .darkAqua)
         popover = pop
 
         refresh()
