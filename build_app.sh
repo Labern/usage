@@ -73,3 +73,5 @@ touch "$INSTALL_DIR/Usage.app"
 killall Dock 2>/dev/null || true
 
 echo "Installed to $INSTALL_DIR/Usage.app"
+
+open "$INSTALL_DIR/Usage.app"

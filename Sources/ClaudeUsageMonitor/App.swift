@@ -540,7 +540,7 @@ struct PhoneDashboardPanel: View {
                         .background(Color.white)
                         .cornerRadius(8)
                 }
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 6) {
                     Button {
                         openInChrome(monitor.phoneURL)
                     } label: {
@@ -652,7 +652,9 @@ struct MenuContentView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Settings")
-                    Circle().fill(Color.accentTeal).frame(width: 9, height: 9)
+                    Circle()
+                        .fill(Color.accentTeal)
+                        .frame(width: 9, height: 9)
                         .opacity(pulse ? 1 : 0.3)
                         .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: pulse)
                         .onAppear { pulse = true }
@@ -751,6 +753,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var changeSubscription: AnyCancellable?
+    private var turnCountSubscription: AnyCancellable?
+    private var pulseTimer: Timer?
     private var outsideClickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -811,6 +815,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         changeSubscription = sharedMonitor.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.refresh() }
         }
+
+        // Pulse the menu bar button whenever a new turn is detected.
+        turnCountSubscription = sharedMonitor.$turnCount
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.pulseMenuBar() }
     }
 
     private func refresh() {
@@ -820,6 +830,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.title = showIcon
             ? menuBarSeparator(sharedMonitor.settings.separatorStyle) + sharedMonitor.menuBarText
             : sharedMonitor.menuBarText
+    }
+
+    private func pulseMenuBar() {
+        pulseTimer?.invalidate()
+        var elapsed = 0.0
+        let interval = 1.0 / 24.0
+        let duration = 0.55
+        let percent = sharedMonitor.estimatedPercent
+
+        pulseTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] timer in
+            guard let self = self, let button = self.statusItem?.button else {
+                timer.invalidate(); return
+            }
+            elapsed += interval
+            if elapsed >= duration {
+                timer.invalidate(); self.pulseTimer = nil; self.refresh(); return
+            }
+            // Ease-out: fast spin at start, slows as it completes one revolution
+            let t = elapsed / duration
+            let eased = 1 - pow(1 - t, 2)
+            let rotation = CGFloat(eased * 360)
+            button.image = renderPieIconImage(percent: percent, trailingGap: 1, rotationOffset: rotation)
+        }
     }
 
     @objc private func toggle() {

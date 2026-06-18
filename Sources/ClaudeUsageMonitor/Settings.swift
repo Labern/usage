@@ -85,7 +85,7 @@ struct PieSlice: Shape {
 /// MenuBarExtra's label area is small and finicky about custom Shape views
 /// mixed with Text in an HStack — sizing collapses unpredictably. A fixed-size
 /// NSImage has an unambiguous intrinsic size and renders reliably there.
-func renderPieIconImage(percent: Double, diameter: CGFloat = 16, trailingGap: CGFloat = 6) -> NSImage {
+func renderPieIconImage(percent: Double, diameter: CGFloat = 16, trailingGap: CGFloat = 6, rotationOffset: CGFloat = 0) -> NSImage {
     // Canvas is wider than the circle itself — the extra trailing space is
     // baked into the bitmap so there's reliable breathing room before the
     // title text, regardless of how NSStatusBarButton spaces image vs title.
@@ -115,7 +115,8 @@ func renderPieIconImage(percent: Double, diameter: CGFloat = 16, trailingGap: CG
         // y-up coordinate space here (NSImage lockFocus, not flipped):
         // 90° is already 12 o'clock, and clockwise:true sweeps downward
         // from there — exactly the "fills clockwise from the top" behavior.
-        pie.appendArc(withCenter: center, radius: radius, startAngle: 90, endAngle: 90 - sweep, clockwise: true)
+        let startAngle: CGFloat = 90 + rotationOffset
+        pie.appendArc(withCenter: center, radius: radius, startAngle: startAngle, endAngle: startAngle - sweep, clockwise: true)
         pie.close()
         nsGaugeColor(for: clamped).setFill()
         pie.fill()
