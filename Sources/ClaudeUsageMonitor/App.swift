@@ -588,8 +588,7 @@ struct PhoneDashboardPanel: View {
                     } label: {
                         Text(monitor.phoneURL)
                             .font(.system(size: 13, design: .monospaced))
-                            .foregroundStyle(Color.accentTeal)
-                            .underline()
+                            .foregroundStyle(.white.opacity(0.8))
                     }
                     .buttonStyle(.plain)
                     .help("Open in Chrome")
