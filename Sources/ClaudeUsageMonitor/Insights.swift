@@ -297,6 +297,7 @@ struct InsightsView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(14)
                         .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.05)))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(insight.tone.color.opacity(0.4), lineWidth: 1))
