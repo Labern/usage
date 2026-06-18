@@ -302,7 +302,7 @@ final class UsageMonitor: ObservableObject {
 
         localServer.statusProvider = { [weak self] in self?.statusSnapshot() ?? [:] }
         localServer.start()
-        insightsAnalyzer.refresh(weeklyPercent: syncState.weeklyPercent)
+        insightsAnalyzer.refresh(weeklyPercent: syncState.weeklyPercent, sessionPercent: syncState.sessionPercent, sessionResetsAt: syncState.sessionResetsAt)
     }
 
     /// Called right after a turn is recorded — fetches real, fresh data
@@ -334,7 +334,11 @@ final class UsageMonitor: ObservableObject {
     }
 
     func openInsights() {
-        insightsWindow.show(analyzer: insightsAnalyzer, weeklyPercent: syncState.weeklyPercent, anchorFrame: anchorFrameProvider?(), side: .left)
+        insightsWindow.show(
+            analyzer: insightsAnalyzer, weeklyPercent: syncState.weeklyPercent,
+            sessionPercent: syncState.sessionPercent, sessionResetsAt: syncState.sessionResetsAt,
+            anchorFrame: anchorFrameProvider?(), side: .left
+        )
     }
 
     func openSettings() {

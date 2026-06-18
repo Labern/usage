@@ -65,11 +65,14 @@ final class InsightsAnalyzer: ObservableObject {
     private let projectsDir = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".claude/projects")
 
-    func refresh(weeklyPercent: Double?) {
+    func refresh(weeklyPercent: Double?, sessionPercent: Double? = nil, sessionResetsAt: Date? = nil) {
         isLoading = true
         DispatchQueue.global(qos: .userInitiated).async {
             let summaries = self.scanAllSessions()
-            let generated = Self.generateInsights(sessions: summaries, weeklyPercent: weeklyPercent)
+            let generated = Self.generateInsights(
+                sessions: summaries, weeklyPercent: weeklyPercent,
+                sessionPercent: sessionPercent, sessionResetsAt: sessionResetsAt
+            )
             DispatchQueue.main.async {
                 self.sessions = summaries
                 self.insights = generated
@@ -128,9 +131,44 @@ final class InsightsAnalyzer: ObservableObject {
 
     // MARK: Rule-based recommendations
 
-    static func generateInsights(sessions: [SessionSummary], weeklyPercent: Double?) -> [Insight] {
-        guard !sessions.isEmpty else { return [] }
+    /// Linear projection from current session usage: extrapolates the rate
+    /// of % consumed per second since the 5-hour session window started,
+    /// then estimates when that rate would hit 100%. An honest "if you keep
+    /// going like this" estimate, not a guarantee — and `nil` once you're
+    /// already on track to make it to the reset without running out.
+    static func sessionRunOutEstimate(percent: Double?, resetsAt: Date?) -> Date? {
+        guard let percent = percent, percent > 0, let resetsAt = resetsAt else { return nil }
+        let sessionLength: TimeInterval = 5 * 3600
+        let sessionStart = resetsAt.addingTimeInterval(-sessionLength)
+        let elapsed = Date().timeIntervalSince(sessionStart)
+        guard elapsed > 1 else { return nil }
+        let remaining = 100 - percent
+        guard remaining > 0 else { return Date() }
+        let ratePerSecond = percent / elapsed
+        guard ratePerSecond > 0 else { return nil }
+        let projected = Date().addingTimeInterval(remaining / ratePerSecond)
+        // If the projection lands after the session would reset anyway,
+        // there's nothing to warn about — current pace comfortably lasts.
+        guard projected < resetsAt else { return nil }
+        return projected
+    }
+
+    static func generateInsights(
+        sessions: [SessionSummary], weeklyPercent: Double?,
+        sessionPercent: Double? = nil, sessionResetsAt: Date? = nil
+    ) -> [Insight] {
         var result: [Insight] = []
+
+        if let runOut = sessionRunOutEstimate(percent: sessionPercent, resetsAt: sessionResetsAt) {
+            result.append(Insight(
+                icon: "⏳",
+                title: "Predicted end of session",
+                detail: "Based on current usage, you will run out at \(runOut.formatted(date: .omitted, time: .shortened)).",
+                tone: .warning
+            ))
+        }
+
+        guard !sessions.isEmpty else { return result }
 
         let recent = Array(sessions.prefix(10))
         let avgTurns = Double(recent.map(\.turnCount).reduce(0, +)) / Double(recent.count)
@@ -218,6 +256,12 @@ final class InsightsAnalyzer: ObservableObject {
 struct InsightsView: View {
     @ObservedObject var analyzer: InsightsAnalyzer
     let weeklyPercent: Double?
+    var sessionPercent: Double? = nil
+    var sessionResetsAt: Date? = nil
+
+    private func refresh() {
+        analyzer.refresh(weeklyPercent: weeklyPercent, sessionPercent: sessionPercent, sessionResetsAt: sessionResetsAt)
+    }
 
     var body: some View {
         ZStack {
@@ -230,7 +274,7 @@ struct InsightsView: View {
                         Text("Insights").font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
                         Spacer()
                         Button(analyzer.isLoading ? "Scanning…" : "Rescan") {
-                            analyzer.refresh(weeklyPercent: weeklyPercent)
+                            refresh()
                         }
                         .disabled(analyzer.isLoading)
                         .tint(.accentViolet)
@@ -277,20 +321,20 @@ struct InsightsView: View {
             }
         }
         .frame(width: 460, height: 560)
-        .onAppear { analyzer.refresh(weeklyPercent: weeklyPercent) }
+        .onAppear { refresh() }
     }
 }
 
 final class InsightsWindowController {
     private var window: NSWindow?
 
-    func show(analyzer: InsightsAnalyzer, weeklyPercent: Double?, anchorFrame: NSRect?, side: WindowSide) {
+    func show(analyzer: InsightsAnalyzer, weeklyPercent: Double?, sessionPercent: Double?, sessionResetsAt: Date?, anchorFrame: NSRect?, side: WindowSide) {
         if let window = window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let hosting = NSHostingController(rootView: InsightsView(analyzer: analyzer, weeklyPercent: weeklyPercent))
+        let hosting = NSHostingController(rootView: InsightsView(analyzer: analyzer, weeklyPercent: weeklyPercent, sessionPercent: sessionPercent, sessionResetsAt: sessionResetsAt))
         let window = NSWindow(contentViewController: hosting)
         window.title = "Claude Usage Insights"
         window.styleMask = [.titled, .closable, .miniaturizable]
