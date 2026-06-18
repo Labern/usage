@@ -531,6 +531,7 @@ struct PhoneDashboardPanel: View {
             Text("📱 OPEN ON PHONE")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.white.opacity(0.4))
+                .padding(.bottom, 4)
             HStack(spacing: 14) {
                 if let qr = generateQRCode(from: monitor.phoneURL) {
                     Image(nsImage: qr)
