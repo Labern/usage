@@ -4,27 +4,22 @@ A menu bar app that shows your Claude plan usage as a live, color-changing circl
 
 ## Install
 
-```
-xcode-select --install
-```
-
-Download this repo as a ZIP and unzip it, then:
-
-```
-cd ~/Downloads/usage-main
-./build_app.sh
+```bash
+brew tap Labern/tap
+brew trust --cask Labern/tap/claude-usage
+brew install --cask Labern/tap/claude-usage
 ```
 
-`Cmd+Space` → "Usage" → Return. Click the menu bar icon → **Connect Claude account**.
+Then `Cmd+Space` → "Usage" → Return. Click the menu bar icon → **Connect Claude account**.
 
-## Usage & features
+> **Note:** `brew trust` is required by Homebrew 6 for third-party taps. You only need to run it once.
 
-- **Circle** — your current 5-hour session usage. Fills clockwise, color
-  shifts teal → orange → red.
+## Features
+
+- **Circle** — your current 5-hour session usage. Fills clockwise, color shifts teal → orange → red.
 - **Weekly %** and **next reset time** — shown under the circle.
 - **⚙️ Settings** — pick what shows in the menu bar, and the separator style.
-- **🕐 Turn History** — recent activity timeline, so you can see when/where a
-  usage spike happened.
+- **🕐 Turn History** — recent activity timeline, so you can see when/where a usage spike happened.
 - **✨ Insights** — auto-generated notes on your usage patterns.
 - **QR code** — scan with your phone (same Wi-Fi) for a live view there too.
 
@@ -36,11 +31,16 @@ cd ~/Downloads/usage-main
 
 ---
 
-## For developers
+## Build from source
 
-`./build_app.sh` builds the Swift package, wraps it in `Usage.app`, and
-installs to `/Applications` **in place** (not delete + recreate — WKWebView's
-cookie persistence is sensitive to the bundle's on-disk identity).
+```bash
+xcode-select --install
+git clone https://github.com/Labern/usage.git
+cd usage
+./build_app.sh
+```
+
+`./build_app.sh` builds the Swift package, wraps it in `Usage.app`, and installs to `/Applications` **in place** (not delete + recreate — WKWebView's cookie persistence is sensitive to the bundle's on-disk identity).
 
 | File | Responsibility |
 |---|---|
@@ -52,5 +52,4 @@ cookie persistence is sensitive to the bundle's on-disk identity).
 | `TurnHistory.swift` | Per-turn timeline over local session transcripts |
 | `Settings.swift` | Persisted settings, pie icon renderer, Settings window |
 
-Limitations: undocumented API, no Developer ID signing (Gatekeeper may warn
-on another Mac).
+Limitations: undocumented API, no Developer ID signing (Gatekeeper may warn on another Mac).
