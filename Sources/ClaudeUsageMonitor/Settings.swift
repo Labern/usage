@@ -94,9 +94,14 @@ func renderPieIconImage(percent: Double, diameter: CGFloat = 16, trailingGap: CG
 
     let inset: CGFloat = 1.2
     let ovalRect = NSRect(x: inset, y: inset, width: diameter - inset * 2, height: diameter - inset * 2)
-    NSColor.labelColor.withAlphaComponent(0.35).setStroke()
+    // NSColor.labelColor resolves against whatever appearance is active in
+    // this drawing context (typically light/black by default), not the menu
+    // bar's actual dark appearance — at 0.35 alpha it was essentially
+    // invisible there. A fixed light gray at higher opacity reads reliably
+    // against the menu bar.
+    NSColor(calibratedWhite: 0.88, alpha: 0.85).setStroke()
     let ring = NSBezierPath(ovalIn: ovalRect)
-    ring.lineWidth = 1.3
+    ring.lineWidth = 1.4
     ring.stroke()
 
     let clamped = min(max(percent, 0), 100)

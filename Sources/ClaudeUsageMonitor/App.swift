@@ -173,11 +173,23 @@ func positionWindow(_ window: NSWindow, relativeTo anchorFrame: NSRect?, side: W
         x = anchorFrame.maxX + gap
     }
 
-    let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchorFrame) }) ?? NSScreen.main
+    // Always resolve some screen — falling through to .first if .main is
+    // somehow unavailable — so clamping never silently gets skipped. The
+    // menu bar sits at the top-right corner, so the popover (and therefore
+    // anchorFrame) is often already hard against the right edge; without
+    // this clamp, "open to the right" reliably runs off-screen there.
+    let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchorFrame) })
+        ?? NSScreen.main
+        ?? NSScreen.screens.first
     if let visible = screen?.visibleFrame {
         x = min(max(x, visible.minX), visible.maxX - width)
     }
     window.setFrameTopLeftPoint(NSPoint(x: x, y: anchorFrame.maxY))
+
+    // The popover stays open (semitransient) and renders at a popover-level
+    // window layer above ordinary windows — without this, our window is
+    // frontmost among normal windows but still visually buried beneath it.
+    window.level = .floating
 }
 
 final class UsageMonitor: ObservableObject {
