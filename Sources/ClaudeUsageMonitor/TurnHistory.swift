@@ -169,7 +169,10 @@ struct TurnHistoryRow: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(String(format: "%.0f%%", share * 100))
+                    // A busy hour can have dozens of turns, so any single
+                    // turn's share is often well under 1% — one decimal place
+                    // keeps that visible instead of every row rounding to "0%".
+                    Text(String(format: "%.1f%%", share * 100))
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundStyle(Color.accentTeal)
                     Text("of window")
