@@ -2,10 +2,6 @@
 
 > A menu bar app that shows your Claude plan usage as a live, color-changing circle.
 
-![Menu bar popover](https://raw.githubusercontent.com/Labern/usage/master/screenshots/1_menu_popover_crop.png)
-
----
-
 ## Install
 
 ```bash
@@ -17,6 +13,8 @@ brew install --cask Labern/tap/claude-usage
 Then `Cmd+Space` → "Usage" → Return. Click the menu bar icon → **Connect Claude account**.
 
 > **Note:** `brew trust` is required by Homebrew 6 for third-party taps. You only need to run it once.
+
+![Menu bar popover](https://raw.githubusercontent.com/Labern/usage/master/screenshots/1_menu_popover_crop.png)
 
 ---
 
