@@ -238,7 +238,7 @@ struct SettingsView: View {
 final class SettingsWindowController {
     private var window: NSWindow?
 
-    func show(monitor: UsageMonitor) {
+    func show(monitor: UsageMonitor, anchorFrame: NSRect?, side: WindowSide) {
         if let window = window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -248,9 +248,10 @@ final class SettingsWindowController {
         let window = NSWindow(contentViewController: hosting)
         window.title = "Usage Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
-        window.center()
         window.isReleasedWhenClosed = false
+        applyDarkAppearance(window)
         window.makeKeyAndOrderFront(nil)
+        positionWindow(window, relativeTo: anchorFrame, side: side)
         self.window = window
         NSApp.activate(ignoringOtherApps: true)
     }
