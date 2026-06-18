@@ -69,3 +69,7 @@ cd usage
 | `Settings.swift` | Persisted settings, pie icon renderer, Settings window |
 
 Limitations: undocumented API, no Developer ID signing (Gatekeeper may warn on another Mac).
+
+---
+
+Made with [Claude Code](https://claude.ai/code).
