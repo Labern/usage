@@ -1,6 +1,10 @@
 # Usage
 
-A menu bar app that shows your Claude plan usage as a live, color-changing circle.
+> A menu bar app that shows your Claude plan usage as a live, color-changing circle.
+
+![Menu bar popover](https://raw.githubusercontent.com/Labern/usage/main/screenshots/1_menu_popover_crop.png)
+
+---
 
 ## Install
 
@@ -14,6 +18,18 @@ Then `Cmd+Space` → "Usage" → Return. Click the menu bar icon → **Connect C
 
 > **Note:** `brew trust` is required by Homebrew 6 for third-party taps. You only need to run it once.
 
+---
+
+## Screenshots
+
+| Main | Insights | Turn History | Settings |
+|------|----------|--------------|----------|
+| ![Main popover](https://raw.githubusercontent.com/Labern/usage/main/screenshots/1_menu_popover_crop.png) | ![Insights](https://raw.githubusercontent.com/Labern/usage/main/screenshots/2_insights_crop.png) | ![Turn History](https://raw.githubusercontent.com/Labern/usage/main/screenshots/3_turn_history_crop.png) | ![Settings](https://raw.githubusercontent.com/Labern/usage/main/screenshots/4_settings_crop.png) |
+
+![Menu bar](https://raw.githubusercontent.com/Labern/usage/main/screenshots/5_menubar_crop.png)
+
+---
+
 ## Features
 
 - **Circle** — your current 5-hour session usage. Fills clockwise, color shifts teal → orange → red.
@@ -22,6 +38,8 @@ Then `Cmd+Space` → "Usage" → Return. Click the menu bar icon → **Connect C
 - **🕐 Turn History** — recent activity timeline, so you can see when/where a usage spike happened.
 - **✨ Insights** — auto-generated notes on your usage patterns.
 - **QR code** — scan with your phone (same Wi-Fi) for a live view there too.
+
+---
 
 ## Notes
 
@@ -41,6 +59,8 @@ cd usage
 ```
 
 `./build_app.sh` builds the Swift package, wraps it in `Usage.app`, and installs to `/Applications` **in place** (not delete + recreate — WKWebView's cookie persistence is sensitive to the bundle's on-disk identity).
+
+### Source map
 
 | File | Responsibility |
 |---|---|

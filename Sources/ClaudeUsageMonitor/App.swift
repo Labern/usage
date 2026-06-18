@@ -734,6 +734,19 @@ struct MenuContentView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.white.opacity(0.5))
                 }
+
+                HStack {
+                    Spacer()
+                    Button {
+                        NSWorkspace.shared.open(URL(string: "https://www.instagram.com/labern")!)
+                    } label: {
+                        Text("Made by Labern 🐿️ (and Claude 🕵️)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.25))
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
             }
             .padding(20)
         }

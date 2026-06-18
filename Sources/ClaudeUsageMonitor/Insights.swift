@@ -116,10 +116,10 @@ struct InsightsView: View {
                             Text(insight.icon).font(.system(size: 22))
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(insight.title)
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(.white)
                                 Text(insight.detail)
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 13))
                                     .foregroundStyle(.white.opacity(0.65))
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -132,14 +132,14 @@ struct InsightsView: View {
 
                     if !analyzer.sessions.isEmpty {
                         Divider().background(Color.white.opacity(0.1))
-                        Text("RECENT SESSIONS").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.4))
+                        Text("RECENT SESSIONS").font(.system(size: 12, weight: .bold)).foregroundStyle(.white.opacity(0.4))
                         ForEach(analyzer.sessions.prefix(12)) { s in
                             HStack {
-                                Text(s.label).font(.system(size: 11)).foregroundStyle(.white.opacity(0.8))
+                                Text(s.label).font(.system(size: 13)).foregroundStyle(.white.opacity(0.8))
                                 Spacer()
-                                Text("\(s.turnCount) turns").font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.4))
+                                Text("\(s.turnCount) turns").font(.system(size: 12, design: .monospaced)).foregroundStyle(.white.opacity(0.4))
                                 Text(s.lastTimestamp.formatted(date: .abbreviated, time: .omitted))
-                                    .font(.system(size: 10)).foregroundStyle(.white.opacity(0.3))
+                                    .font(.system(size: 12)).foregroundStyle(.white.opacity(0.3))
                             }
                             .padding(.vertical, 2)
                         }

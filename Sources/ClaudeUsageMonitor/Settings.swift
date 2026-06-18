@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Foundation
+import ServiceManagement
 import UsageCore
 
 // MARK: - Persisted settings
@@ -33,6 +34,7 @@ struct AppSettings: Codable {
     var showNextSession: Bool = true
     var showPieIcon: Bool = true
     var separatorStyle: SeparatorStyle = .chevron
+    var launchAtLogin: Bool = true
 
     static let defaultSettings = AppSettings()
 }
@@ -231,14 +233,34 @@ struct SettingsView: View {
                     .padding(.top, 4)
                 }
 
-                Spacer()
+                Divider().background(Color.white.opacity(0.1))
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("STARTUP").font(.system(size: 14, weight: .bold)).foregroundStyle(.white.opacity(0.5))
+                    Toggle("Launch at login", isOn: Binding(
+                        get: { monitor.settings.launchAtLogin },
+                        set: { newValue in
+                            monitor.settings.launchAtLogin = newValue
+                            monitor.persistSettings()
+                            if newValue {
+                                try? SMAppService.mainApp.register()
+                            } else {
+                                try? SMAppService.mainApp.unregister()
+                            }
+                        }
+                    ))
+                    .font(.system(size: 15))
+                    .toggleStyle(.checkbox)
+                    .foregroundStyle(.white.opacity(0.9))
+                }
+
                 Text("Preview: \(monitor.menuBarText.isEmpty ? "(icon only)" : monitor.menuBarText)")
                     .font(.system(size: 15, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.6))
             }
             .padding(28)
         }
-        .frame(width: 460, height: 560)
+        .frame(width: 460)
     }
 }
 

@@ -115,17 +115,17 @@ struct TurnHistoryView: View {
                 .onChange(of: analyzer.windowHours) { _ in analyzer.refresh() }
 
                 Text("Per-turn timestamps and token weighting come straight from your local session transcripts. The % share below is a local estimate of relative activity in this window — not a per-turn read of your real account percentage, which Anthropic only exposes as a point-in-time snapshot.")
-                    .font(.system(size: 12))
+                    .font(.system(size: 14))
                     .foregroundStyle(.white.opacity(0.45))
                     .fixedSize(horizontal: false, vertical: true)
 
                 if analyzer.entries.isEmpty {
                     Text(analyzer.isLoading ? "Scanning…" : "No turns in this window.")
-                        .font(.system(size: 13))
+                        .font(.system(size: 15))
                         .foregroundStyle(.white.opacity(0.5))
                 } else {
                     Text("\(analyzer.entries.count) turns in this window")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.5))
                 }
 
@@ -159,13 +159,13 @@ struct TurnHistoryRow: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(timeFormatter.string(from: entry.timestamp))
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.system(size: 14, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.6))
                     Text(entry.projectLabel)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(.white)
                     Text(entry.model.replacingOccurrences(of: "claude-", with: ""))
-                        .font(.system(size: 11))
+                        .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.4))
                 }
                 Spacer()
@@ -177,7 +177,7 @@ struct TurnHistoryRow: View {
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundStyle(Color.accentTeal)
                     Text("of window")
-                        .font(.system(size: 10))
+                        .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.35))
                 }
             }
