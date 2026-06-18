@@ -2,7 +2,7 @@
 
 > A menu bar app that shows your Claude plan usage as a live, color-changing circle.
 
-![Menu bar popover](https://raw.githubusercontent.com/Labern/usage/main/screenshots/1_menu_popover_crop.png)
+![Menu bar popover](https://raw.githubusercontent.com/Labern/usage/master/screenshots/1_menu_popover_crop.png)
 
 ---
 
@@ -24,9 +24,9 @@ Then `Cmd+Space` → "Usage" → Return. Click the menu bar icon → **Connect C
 
 | Main | Insights | Turn History | Settings |
 |------|----------|--------------|----------|
-| ![Main popover](https://raw.githubusercontent.com/Labern/usage/main/screenshots/1_menu_popover_crop.png) | ![Insights](https://raw.githubusercontent.com/Labern/usage/main/screenshots/2_insights_crop.png) | ![Turn History](https://raw.githubusercontent.com/Labern/usage/main/screenshots/3_turn_history_crop.png) | ![Settings](https://raw.githubusercontent.com/Labern/usage/main/screenshots/4_settings_crop.png) |
+| ![Main popover](https://raw.githubusercontent.com/Labern/usage/master/screenshots/1_menu_popover_crop.png) | ![Insights](https://raw.githubusercontent.com/Labern/usage/master/screenshots/2_insights_crop.png) | ![Turn History](https://raw.githubusercontent.com/Labern/usage/master/screenshots/3_turn_history_crop.png) | ![Settings](https://raw.githubusercontent.com/Labern/usage/master/screenshots/4_settings_crop.png) |
 
-![Menu bar](https://raw.githubusercontent.com/Labern/usage/main/screenshots/5_menubar_crop.png)
+![Menu bar](https://raw.githubusercontent.com/Labern/usage/master/screenshots/5_menubar_crop.png)
 
 ---
 
