@@ -202,6 +202,7 @@ final class TurnHistoryWindowController {
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.isReleasedWhenClosed = false
         applyDarkAppearance(window)
+        window.setContentSize(hosting.view.fittingSize)
         window.makeKeyAndOrderFront(nil)
         positionWindow(window, relativeTo: anchorFrame, side: side)
         self.window = window

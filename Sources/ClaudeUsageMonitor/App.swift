@@ -334,7 +334,7 @@ final class UsageMonitor: ObservableObject {
     }
 
     func openInsights() {
-        insightsWindow.show(analyzer: insightsAnalyzer, weeklyPercent: syncState.weeklyPercent, anchorFrame: anchorFrameProvider?(), side: .right)
+        insightsWindow.show(analyzer: insightsAnalyzer, weeklyPercent: syncState.weeklyPercent, anchorFrame: anchorFrameProvider?(), side: .left)
     }
 
     func openSettings() {
@@ -342,7 +342,7 @@ final class UsageMonitor: ObservableObject {
     }
 
     func openTurnHistory() {
-        turnHistoryWindow.show(analyzer: turnHistoryAnalyzer, anchorFrame: anchorFrameProvider?(), side: .right)
+        turnHistoryWindow.show(analyzer: turnHistoryAnalyzer, anchorFrame: anchorFrameProvider?(), side: .left)
     }
 
     /// Force an immediate real fetch from the actual claude.ai usage API —
@@ -554,6 +554,17 @@ struct ConnectPanel: View {
 
 // MARK: - Phone dashboard panel
 
+/// Opens a URL specifically in Chrome (not whatever the system default is) —
+/// falls back to the default browser if Chrome isn't installed.
+func openInChrome(_ urlString: String) {
+    guard let url = URL(string: urlString) else { return }
+    guard let chromeURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") else {
+        NSWorkspace.shared.open(url)
+        return
+    }
+    NSWorkspace.shared.open([url], withApplicationAt: chromeURL, configuration: NSWorkspace.OpenConfiguration())
+}
+
 struct PhoneDashboardPanel: View {
     @ObservedObject var monitor: UsageMonitor
 
@@ -572,9 +583,16 @@ struct PhoneDashboardPanel: View {
                         .cornerRadius(8)
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(monitor.phoneURL)
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.8))
+                    Button {
+                        openInChrome(monitor.phoneURL)
+                    } label: {
+                        Text(monitor.phoneURL)
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(Color.accentTeal)
+                            .underline()
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open in Chrome")
                     Text("scan with your phone camera —")
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.4))
@@ -718,6 +736,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var changeSubscription: AnyCancellable?
+    private var outsideClickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         sharedMonitor.start()
@@ -748,6 +767,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pop.contentViewController = hosting
         pop.appearance = NSAppearance(named: .darkAqua)
         popover = pop
+
+        // .semitransient alone leaves the popover open when clicking other
+        // apps/desktop in some configurations, requiring Esc. A global click
+        // monitor only fires for clicks outside our own app's windows — so
+        // it closes the popover on any outside click while leaving our own
+        // Settings/Insights/Turn History windows free to keep it open.
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard let self = self, self.popover.isShown else { return }
+            self.popover.close()
+        }
 
         sharedMonitor.anchorFrameProvider = { [weak self] in
             guard let self = self else { return nil }

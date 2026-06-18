@@ -255,6 +255,11 @@ final class SettingsWindowController {
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.isReleasedWhenClosed = false
         applyDarkAppearance(window)
+        // NSWindow(contentViewController:) can pick up a stale/default frame
+        // before SwiftUI's `.frame()` modifier has actually laid out — fixing
+        // the content size here guarantees positionWindow's width math (which
+        // subtracts width for the .left side) sees the real size.
+        window.setContentSize(hosting.view.fittingSize)
         window.makeKeyAndOrderFront(nil)
         positionWindow(window, relativeTo: anchorFrame, side: side)
         self.window = window
