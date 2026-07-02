@@ -62,6 +62,24 @@ final class ParseTurnUsageTests: XCTestCase {
         XCTAssertEqual(result?.cacheWrite1h, 0)
     }
 
+    func testFractionalSecondTimestamp_parsedToRealInstant() {
+        // Real Claude Code transcripts use millisecond fractional seconds, e.g.
+        // "2026-06-18T00:37:42.925Z". A bare ISO8601DateFormatter can't parse
+        // these and would silently fall back to Date() (parse time), making turn
+        // times read as stale. Assert we recover the real instant instead.
+        let line = """
+        {"type":"assistant","timestamp":"2026-06-18T00:37:42.925Z","message":{"id":"msg_frac","model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":0}}}
+        """
+        let result = parseTurnUsage(fromLine: line)
+        XCTAssertNotNil(result)
+        // 2026-06-18T00:37:42.925Z as a reference-date interval.
+        let expected = parseUsageDate("2026-06-18T00:37:42.925Z")!
+        XCTAssertEqual(result!.timestamp.timeIntervalSinceReferenceDate,
+                       expected.timeIntervalSinceReferenceDate, accuracy: 0.01)
+        // And it must NOT have fallen back to ~now.
+        XCTAssertLessThan(result!.timestamp, Date().addingTimeInterval(-60))
+    }
+
     func testMissingTimestamp_fallsBackWithoutCrash() {
         // No "timestamp" key in the line — should still parse, timestamp ~= now
         let before = Date()

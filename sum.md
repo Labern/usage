@@ -8151,3 +8151,30 @@ D. **learning.md further expansion:**
 - Uncommitted change: App.swift (cumulativeCost removal, 1 field + 1 increment deleted)
 - Untracked: sum.md (this file), Sources/UsageCore/ (empty dir), Tests/UsageTests/ (empty dir)
 - Build: clean (swift build passes, zero warnings)
+
+---
+
+## Session — 2026-06-18 (animated menu bar + polish)
+
+### What was built
+
+**Spinning pie animation in the macOS menu bar**
+- When a new Claude turn fires, the pie chart icon in the system status bar spins one full revolution (ease-out, 0.55s, 24fps) then snaps back to real position.
+- Implemented via `Timer` cycling `renderPieIconImage` with a new `rotationOffset: CGFloat = 0` parameter — the only reliable approach since `NSAnimationContext` alphaValue changes don't visually affect the system status bar compositor.
+- `turnCountSubscription` in `AppDelegate` subscribes to `sharedMonitor.$turnCount` (`.dropFirst()` skips initial value), calls `pulseMenuBar()` on each new turn.
+
+**Pulsing dot restored in popover**
+- `WaveformActivityView` (4 animated teal bars) was removed from the popover header — it was built in the wrong session for the wrong location.
+- Original pulsing teal `Circle` dot restored with `@State private var pulse = false` + `.animation(.easeInOut(duration:1).repeatForever(autoreverses:true))`.
+
+**`build_app.sh` auto-relaunch**
+- Added `open "$INSTALL_DIR/Usage.app"` at end of script — no more manual relaunch after each build.
+
+**Phone dashboard polish**
+- VStack spacing in phone panel bumped 3 → 6 for more breathing room between URL and hint text.
+- Added `.padding(.bottom, 4)` below "📱 OPEN ON PHONE" label.
+
+### Commits (all on master)
+- `15a4d88` — spinning pie animation, pulsing dot restored, auto-relaunch, phone panel spacing
+- `c6b7eea` — padding below "Open on Phone" label
+

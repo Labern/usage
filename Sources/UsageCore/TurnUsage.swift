@@ -79,7 +79,7 @@ public func parseTurnUsage(fromLine line: String, sessionPath: String = "") -> T
 
     var timestamp = Date()
     if let tsString = obj["timestamp"] as? String,
-       let parsed = ISO8601DateFormatter().date(from: tsString) {
+       let parsed = parseUsageDate(tsString) {
         timestamp = parsed
     }
 

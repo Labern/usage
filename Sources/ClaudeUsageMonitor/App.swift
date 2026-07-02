@@ -3,6 +3,7 @@ import Foundation
 import AppKit
 import Combine
 import ServiceManagement
+import Carbon.HIToolbox
 import UsageCore
 
 // MARK: - Theme
@@ -123,6 +124,12 @@ final class UsageMonitor: ObservableObject {
     @Published var lastTurnPercentImpact: Double?
     @Published var recentTurns: [TurnUsage] = []
     @Published var turnCount: Int = 0
+    /// Reference "now" the RECENT TURNS relative-time labels are measured
+    /// against. Bumped on every refresh (manual or automatic) so pressing
+    /// Refresh re-ages the timestamps as of that moment — SwiftUI memoizes a
+    /// row's body and won't recompute relativeTime() unless one of its inputs
+    /// changes, so this value must be passed into the row.
+    @Published var now: Date = Date()
     @Published var syncState: SyncState = loadSyncState()
     @Published var settings: AppSettings = loadSettings()
     /// Returns the screen-space frame to position auxiliary windows against —
@@ -279,6 +286,7 @@ final class UsageMonitor: ObservableObject {
     /// no DOM, no selectors, just the same JSON the web app itself reads.
     func refreshNow() {
         isFetching = true
+        now = Date()
         UsageAPI.fetchRawUsageJSON { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -390,17 +398,18 @@ final class UsageMonitor: ObservableObject {
         seenMessageIDs.insert(turn.id)
 
         DispatchQueue.main.async {
-            self.lastTurn = turn
             self.turnCount += 1
-            self.recentTurns.insert(turn, at: 0)
-            if self.recentTurns.count > 10 { self.recentTurns.removeLast() }
+            self.recentTurns.append(turn)
+            self.recentTurns.sort { $0.timestamp > $1.timestamp }
+            if self.recentTurns.count > 10 { self.recentTurns = Array(self.recentTurns.prefix(10)) }
             self.syncState.accumulatedWeightedCost += turn.weightedCost
-            // Show a calibrated per-turn estimate immediately, before the API call
-            // returns. If we have a factor from a prior observed API tick, multiply
-            // this turn's local cost by it. The API call may later overwrite this
-            // with the real delta if the integer percent actually ticked up.
-            if let factor = self.syncState.calibrationFactor, factor > 0, turn.weightedCost > 0 {
-                self.lastTurnPercentImpact = turn.weightedCost * factor
+
+            // Only update lastTurn and per-turn impact when this is the chronologically newest turn.
+            if self.lastTurn == nil || turn.timestamp >= self.lastTurn!.timestamp {
+                self.lastTurn = turn
+                if let factor = self.syncState.calibrationFactor, factor > 0, turn.weightedCost > 0 {
+                    self.lastTurnPercentImpact = turn.weightedCost * factor
+                }
             }
             self.fetchAfterTurn()
         }
@@ -442,11 +451,16 @@ struct GaugeView: View {
 
 // MARK: - Connect / status panel
 
-func relativeTime(_ date: Date) -> String {
-    let seconds = -date.timeIntervalSinceNow
-    if seconds < 60 { return "just now" }
-    if seconds < 3600 { return "\(Int(seconds / 60))m ago" }
-    return "\(Int(seconds / 3600))h ago"
+func relativeTime(_ date: Date, relativeTo now: Date = Date()) -> String {
+    let seconds = Int(now.timeIntervalSince(date))
+    if seconds < 5 { return "just now" }
+    if seconds < 60 { return "\(seconds)s ago" }
+    let minutes = seconds / 60
+    if minutes < 60 { return minutes == 1 ? "1 min ago" : "\(minutes) min ago" }
+    let hours = minutes / 60
+    if hours < 24 { return hours == 1 ? "1 hr ago" : "\(hours) hr ago" }
+    let days = hours / 24
+    return days == 1 ? "1 day ago" : "\(days) days ago"
 }
 
 func durationUntil(_ date: Date) -> String {
@@ -570,6 +584,7 @@ private struct RecentTurnRow: View {
     let calibrationFactor: Double?
     let isLatest: Bool
     let latestImpact: Double?
+    let now: Date
 
     private var impactText: String? {
         // Use the live lastTurnPercentImpact for the newest entry — it may
@@ -588,10 +603,10 @@ private struct RecentTurnRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text(relativeTime(turn.timestamp))
+            Text(relativeTime(turn.timestamp, relativeTo: now))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.35))
-                .frame(width: 52, alignment: .leading)
+                .frame(width: 64, alignment: .leading)
             Text(turn.model.replacingOccurrences(of: "claude-", with: ""))
                 .font(.system(size: 13, weight: isLatest ? .semibold : .regular))
                 .foregroundStyle(.white.opacity(isLatest ? 0.9 : 0.55))
@@ -695,7 +710,8 @@ struct MenuContentView: View {
                                 turn: turn,
                                 calibrationFactor: monitor.syncState.calibrationFactor,
                                 isLatest: turn.id == monitor.recentTurns.first?.id,
-                                latestImpact: monitor.lastTurnPercentImpact
+                                latestImpact: monitor.lastTurnPercentImpact,
+                                now: monitor.now
                             )
                         }
                     }
@@ -740,7 +756,7 @@ struct MenuContentView: View {
                     Button {
                         NSWorkspace.shared.open(URL(string: "https://www.instagram.com/labern")!)
                     } label: {
-                        Text("Made by Labern 🐿️ (and Claude 🕵️)")
+                        Text("Made by Labern 🐿️ (and Claude 👀)")
                             .font(.system(size: 12))
                             .foregroundStyle(.white.opacity(0.25))
                     }
@@ -770,6 +786,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var turnCountSubscription: AnyCancellable?
     private var pulseTimer: Timer?
     private var outsideClickMonitor: Any?
+    private var hotKeyRefE: EventHotKeyRef?
+    private var hotKeyHandlerRef: EventHandlerRef?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         sharedMonitor.start()
@@ -835,6 +853,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.pulseMenuBar() }
+
+        registerToggleHotKey()
+    }
+
+    /// Registers a system-wide ⌘E that toggles the popover, regardless of
+    /// which app is frontmost. Uses Carbon's RegisterEventHotKey (no
+    /// Accessibility permission required, unlike a CGEventTap) and routes the
+    /// press through the same `toggle()` the menu bar button uses.
+    private func registerToggleHotKey() {
+        var eventSpec = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        // The C callback can't capture self, so pass it through userData.
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, _, userData -> OSStatus in
+                guard let userData = userData else { return noErr }
+                let delegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
+                DispatchQueue.main.async { delegate.toggle() }
+                return noErr
+            },
+            1, &eventSpec,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &hotKeyHandlerRef
+        )
+        RegisterEventHotKey(
+            UInt32(kVK_ANSI_E), UInt32(cmdKey),
+            EventHotKeyID(signature: 0x43554D4F /* 'CUMO' */, id: 1),
+            GetApplicationEventTarget(), 0, &hotKeyRefE
+        )
     }
 
     private func refresh() {
@@ -869,7 +918,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func toggle() {
+    @objc func toggle() {
         guard let button = statusItem.button else { return }
         if popover.isShown {
             popover.close()
