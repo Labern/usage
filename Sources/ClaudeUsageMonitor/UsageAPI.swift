@@ -35,7 +35,11 @@ enum UsageAPI {
 
     private static func saveCookieJar(_ cookies: [SavedCookie]) {
         guard let data = try? JSONEncoder().encode(cookies) else { return }
-        try? data.write(to: cookieJarURL)
+        try? data.write(to: cookieJarURL, options: .atomic)
+        // These are live claude.ai session cookies — owner-only on disk.
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: cookieJarURL.path
+        )
     }
 
     /// Call this once, right when the user finishes logging in (still while

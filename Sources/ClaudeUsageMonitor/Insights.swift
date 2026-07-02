@@ -157,12 +157,19 @@ final class InsightsWindowController {
     private var window: NSWindow?
 
     func show(analyzer: InsightsAnalyzer, weeklyPercent: Double?, sessionPercent: Double?, sessionResetsAt: Date?, anchorFrame: NSRect?, side: WindowSide) {
+        let view = InsightsView(analyzer: analyzer, weeklyPercent: weeklyPercent, sessionPercent: sessionPercent, sessionResetsAt: sessionResetsAt)
         if let window = window {
+            // Reopening: swap in a view built from the CURRENT percentages and
+            // rescan — onAppear won't re-fire for a window that's only been
+            // ordered out and back in, so without this the reopened window
+            // shows the numbers from whenever it was first created.
+            (window.contentViewController as? NSHostingController<InsightsView>)?.rootView = view
+            analyzer.refresh(weeklyPercent: weeklyPercent, sessionPercent: sessionPercent, sessionResetsAt: sessionResetsAt)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let hosting = NSHostingController(rootView: InsightsView(analyzer: analyzer, weeklyPercent: weeklyPercent, sessionPercent: sessionPercent, sessionResetsAt: sessionResetsAt))
+        let hosting = NSHostingController(rootView: view)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Claude Usage Insights"
         window.styleMask = [.titled, .closable, .miniaturizable]

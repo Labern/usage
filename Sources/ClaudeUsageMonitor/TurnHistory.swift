@@ -193,6 +193,10 @@ final class TurnHistoryWindowController {
 
     func show(analyzer: TurnHistoryAnalyzer, anchorFrame: NSRect?, side: WindowSide) {
         if let window = window {
+            // Reopening: onAppear won't re-fire for a window that's only been
+            // ordered out and back in, so rescan explicitly — otherwise the
+            // reopened window shows the turns from whenever it last refreshed.
+            analyzer.refresh()
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return

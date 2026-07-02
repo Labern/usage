@@ -18,6 +18,18 @@ public let cacheWrite5mMultiplier = 1.25
 public let cacheWrite1hMultiplier = 2.0
 public let cacheReadMultiplier = 0.1
 
+/// Fallback pricing by model family, for versions not yet in `pricingTable`
+/// (e.g. a brand-new "claude-opus-4-9"). Without this, an unlisted model
+/// prices at zero and its turns silently vanish from calibration, insights,
+/// and turn-history shares. Models with no recognizable family (including
+/// "<synthetic>") still price at zero.
+public let familyPricingTable: [String: ModelPricing] = [
+    "opus":   ModelPricing(input: 5.00, output: 25.00),
+    "sonnet": ModelPricing(input: 3.00, output: 15.00),
+    "haiku":  ModelPricing(input: 1.00, output: 5.00),
+    "fable":  ModelPricing(input: 10.00, output: 50.00),
+]
+
 public struct TurnUsage: Identifiable {
     public let id: String
     public let sessionPath: String
@@ -38,7 +50,14 @@ public struct TurnUsage: Identifiable {
         self.cacheRead = cacheRead; self.timestamp = timestamp
     }
 
-    public var pricing: ModelPricing { pricingTable[model] ?? ModelPricing(input: 0, output: 0) }
+    public var pricing: ModelPricing {
+        if let exact = pricingTable[model] { return exact }
+        let lower = model.lowercased()
+        for (family, price) in familyPricingTable where lower.contains(family) {
+            return price
+        }
+        return ModelPricing(input: 0, output: 0)
+    }
 
     public var weightedCost: Double {
         let i = Double(inputTokens) * pricing.input

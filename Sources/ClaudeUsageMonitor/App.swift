@@ -74,7 +74,7 @@ func loadSyncState() -> SyncState {
 
 func saveSyncState(_ state: SyncState) {
     guard let data = try? JSONEncoder().encode(state) else { return }
-    try? data.write(to: stateFileURL)
+    try? data.write(to: stateFileURL, options: .atomic)
 }
 
 // MARK: - JSONL tailing across ALL local Claude Code sessions on this Mac
@@ -137,8 +137,14 @@ final class UsageMonitor: ObservableObject {
     /// button. Set once by AppDelegate at launch.
     var anchorFrameProvider: (() -> NSRect?)?
 
+    /// fileOffsets and seenMessageIDs are touched only on scanQueue — all
+    /// transcript reading (including the full-history launch scan, which can
+    /// be hundreds of MB) happens there so the main thread never blocks on
+    /// file I/O. UI state is still mutated on main inside processLine.
     private var fileOffsets: [String: UInt64] = [:]
     private var seenMessageIDs = Set<String>()
+    private let scanQueue = DispatchQueue(label: "UsageMonitor.transcriptScan", qos: .utility)
+    private var scanInFlight = false  // main-thread only
     private var timer: Timer?
     private var fetchTimer: Timer?
 
@@ -223,9 +229,9 @@ final class UsageMonitor: ObservableObject {
     func start() {
         guard !hasStarted else { return }
         hasStarted = true
-        scanAndPoll()
+        scheduleScan()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.scanAndPoll()
+            self?.scheduleScan()
         }
         // Safety-net background re-check even if no turns happen for a while.
         fetchTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -367,6 +373,20 @@ final class UsageMonitor: ObservableObject {
         return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "jsonl" }
     }
 
+    /// Hops the scan onto scanQueue. If the previous scan is still running
+    /// (the launch full-history read can take a while), the tick is skipped
+    /// rather than queued up — fileOffsets make the next one resume exactly
+    /// where the last left off.
+    private func scheduleScan() {
+        guard !scanInFlight else { return }
+        scanInFlight = true
+        scanQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.scanAndPoll()
+            DispatchQueue.main.async { self.scanInFlight = false }
+        }
+    }
+
     private func scanAndPoll() {
         for url in allTranscriptFiles() { tail(url) }
     }
@@ -467,6 +487,7 @@ func durationUntil(_ date: Date) -> String {
     let secs = date.timeIntervalSinceNow
     guard secs > 0 else { return "now" }
     let mins = Int(secs / 60)
+    if mins < 1 { return "<1 min" }
     if mins < 60 { return "\(mins) min" }
     let hrs = mins / 60
     let rem = mins % 60

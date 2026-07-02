@@ -118,6 +118,20 @@ final class TurnUsageCostTests: XCTestCase {
         XCTAssertEqual(turn.weightedCost, 0.0)
     }
 
+    func testWeightedCost_unlistedVersion_fallsBackToFamilyPricing() {
+        // "claude-opus-4-5" isn't in pricingTable, but it's clearly an opus —
+        // it should price like the opus family ($5/M in, $25/M out), not zero.
+        let turn = makeTurn(model: "claude-opus-4-5", input: 1_000_000, output: 1_000_000)
+        XCTAssertEqual(turn.weightedCost, 30.0, accuracy: 0.001)
+    }
+
+    func testWeightedCost_syntheticModel_staysZero() {
+        // "<synthetic>" appears in real transcripts (zero-token system
+        // messages); it has no family, so it must keep costing nothing.
+        let turn = makeTurn(model: "<synthetic>", input: 1_000_000, output: 1_000_000)
+        XCTAssertEqual(turn.weightedCost, 0.0)
+    }
+
     func testWeightedCost_cacheReadIsCharged() {
         // cache read is 10% of input price; $3/M * 0.1 = $0.3/M
         let turn = makeTurn(model: "claude-sonnet-4-6", input: 0, output: 0, cacheRead: 1_000_000)
